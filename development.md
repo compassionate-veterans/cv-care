@@ -1,221 +1,211 @@
-# FastAPI Project - Development
+# Development
 
-## Docker Compose
+## Prerequisites
 
-* Start the local stack with Docker Compose:
+- Docker + Docker Compose
+- [uv](https://docs.astral.sh/uv/) (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
+- [Bun](https://bun.sh) (`curl -fsSL https://bun.sh/install | bash`)
+
+## Setup
+
+### 1. Clone and configure
+
+```bash
+git clone <your-repo> && cd <your-repo>
+cp .env.example .env
+```
+
+Edit `.env` and fill in at minimum:
+
+| Variable | Required for | Where to get it |
+|---|---|---|
+| `SECRET_KEY` | JWT signing | `python -c "import secrets; print(secrets.token_urlsafe(32))"` |
+| `POSTGRES_PASSWORD` | app_db | any strong password |
+| `FHIR_DB_PASSWORD` | fhir_db | any strong password |
+| `TWILIO_ACCOUNT_SID` | SMS | twilio.com/console |
+| `TWILIO_AUTH_TOKEN` | SMS | twilio.com/console |
+| `TWILIO_NUMBER` | SMS | purchased Twilio number |
+| `THERAPIST_NUMBER` | SMS relay | therapist's mobile, E.164 format |
+| `GOOGLE_CLIENT_ID` | OAuth | console.cloud.google.com |
+| `GOOGLE_CLIENT_SECRET` | OAuth | console.cloud.google.com |
+
+Apple OAuth and Ollama vars can be left empty to start.
+
+### 2. Add local dev context (never committed)
+
+```bash
+cp docs/local-dev-context.example.md docs/local-dev-context.md
+# Edit with your actual patient population and clinical context
+```
+
+This file is read by Claude Code for session context. It is in `.gitignore`.
+
+### 3. Start the stack
+
+```bash
+docker compose up -d
+```
+
+This starts: FastAPI backend, React frontend, app Postgres, HAPI FHIR, FHIR Postgres.
+
+**First startup takes ~2 minutes** — HAPI FHIR initialises its database schema on boot.
+Watch for readiness:
+
+```bash
+docker compose logs -f hapi-fhir | grep "Started Application"
+```
+
+### 4. Verify services
+
+| Service | URL | What to check |
+|---|---|---|
+| API docs | http://localhost:8000/docs | FastAPI Swagger UI |
+| HAPI FHIR UI | http://localhost:8080 | FHIR browser (dev only) |
+| Adminer | http://localhost:8081 | Database web admin |
+| Frontend | http://localhost:5173 | React app |
+| MailCatcher | http://localhost:1080 | Captured emails |
+| Traefik UI | http://localhost:8090 | Proxy routing |
+| app_db | localhost:5432 | psql / any Postgres client |
+
+Quick FHIR smoke test:
+```bash
+curl http://localhost:8080/fhir/metadata | python -m json.tool | head -20
+```
+
+### 5. Run Alembic migrations
+
+```bash
+docker compose exec backend alembic upgrade head
+```
+
+### 6. Seed a superuser
+
+```bash
+docker compose exec backend python scripts/seed_superuser.py
+```
+
+### 7. Pull Ollama model (optional, needed for pipeline)
+
+```bash
+docker compose exec ollama ollama pull llama3.1:8b
+```
+
+### 8. Generate the frontend API client
+
+After any backend route change:
+```bash
+bash scripts/generate-client.sh
+```
+
+---
+
+## Architecture at a glance
+
+```
+                    Docker network (internal)
+  ┌─────────────────────────────────────────────────┐
+  │                                                 │
+  │  FastAPI :8000  ──FHIR REST──▶  HAPI FHIR :8080│
+  │       │                               │         │
+  │       ▼                               ▼         │
+  │   app_db :5432                   fhir_db :5433  │
+  │  (users, sessions,            (HAPI internal —  │
+  │   blasts, pipeline)            never touch)     │
+  │                                                 │
+  │  Ollama :11434  (local inference, no GPU needed)│
+  └─────────────────────────────────────────────────┘
+         ▲
+  Traefik (TLS termination in production)
+```
+
+**Two Postgres, two owners.** FastAPI owns `app_db` via SQLModel/Alembic.
+HAPI FHIR owns `fhir_db` — never connect to it directly.
+HAPI FHIR is not exposed outside the Docker network in production.
+
+---
+
+## Common tasks
+
+```bash
+# Backend shell
+docker compose exec backend bash
+
+# Run tests
+docker compose exec backend bash scripts/tests-start.sh
+
+# Tail pipeline logs
+docker compose logs -f backend | grep pipeline
+
+# Reset HAPI FHIR (wipes all FHIR data)
+docker compose down hapi-fhir fhir-db
+docker volume rm <project>_fhir-db-data
+docker compose up -d hapi-fhir fhir-db
+
+# Add a Python dependency
+docker compose exec backend uv add <package>
+```
+
+---
+
+## Local development without Docker
+
+The Docker Compose services use the same ports as local dev servers. You can stop a Docker service and run it locally instead:
+
+```bash
+# Frontend
+docker compose stop frontend
+bun run dev
+
+# Backend
+docker compose stop backend
+cd backend
+fastapi dev app/main.py
+```
+
+---
+
+## Docker Compose watch
+
+For hot-reload via Docker (alternative to `up -d`):
 
 ```bash
 docker compose watch
 ```
 
-* Now you can open your browser and interact with these URLs:
+`compose.yml` is the main stack. `compose.override.yml` adds dev overrides (volume mounts, Traefik, Mailcatcher, exposed ports). Both are loaded automatically by `docker compose`.
 
-Frontend, built with Docker, with routes handled based on the path: <http://localhost:5173>
-
-Backend, JSON based web API based on OpenAPI: <http://localhost:8000>
-
-Automatic interactive documentation with Swagger UI (from the OpenAPI backend): <http://localhost:8000/docs>
-
-Adminer, database web administration: <http://localhost:8080>
-
-Traefik UI, to see how the routes are being handled by the proxy: <http://localhost:8090>
-
-**Note**: The first time you start your stack, it might take a minute for it to be ready. While the backend waits for the database to be ready and configures everything. You can check the logs to monitor it.
-
-To check the logs, run (in another terminal):
+After changing `.env` vars, restart:
 
 ```bash
-docker compose logs
+docker compose watch
 ```
 
-To check the logs of a specific service, add the name of the service, e.g.:
+---
 
-```bash
-docker compose logs backend
-```
+## Subdomain testing with Traefik
 
-## Mailcatcher
-
-Mailcatcher is a simple SMTP server that catches all emails sent by the backend during local development. Instead of sending real emails, they are captured and displayed in a web interface.
-
-This is useful for:
-
-* Testing email functionality during development
-* Verifying email content and formatting
-* Debugging email-related functionality without sending real emails
-
-The backend is automatically configured to use Mailcatcher when running with Docker Compose locally (SMTP on port 1025). All captured emails can be viewed at <http://localhost:1080>.
-
-## Local Development
-
-The Docker Compose files are configured so that each of the services is available in a different port in `localhost`.
-
-For the backend and frontend, they use the same port that would be used by their local development server, so, the backend is at `http://localhost:8000` and the frontend at `http://localhost:5173`.
-
-This way, you could turn off a Docker Compose service and start its local development service, and everything would keep working, because it all uses the same ports.
-
-For example, you can stop that `frontend` service in the Docker Compose, in another terminal, run:
-
-```bash
-docker compose stop frontend
-```
-
-And then start the local frontend development server:
-
-```bash
-bun run dev
-```
-
-Or you could stop the `backend` Docker Compose service:
-
-```bash
-docker compose stop backend
-```
-
-And then you can run the local development server for the backend:
-
-```bash
-cd backend
-fastapi dev app/main.py
-```
-
-## Docker Compose in `localhost.tiangolo.com`
-
-When you start the Docker Compose stack, it uses `localhost` by default, with different ports for each service (backend, frontend, adminer, etc).
-
-When you deploy it to production (or staging), it will deploy each service in a different subdomain, like `api.example.com` for the backend and `dashboard.example.com` for the frontend.
-
-In the guide about [deployment](deployment.md) you can read about Traefik, the configured proxy. That's the component in charge of transmitting traffic to each service based on the subdomain.
-
-If you want to test that it's all working locally, you can edit the local `.env` file, and change:
+To test subdomain-based routing locally (mirrors production):
 
 ```dotenv
 DOMAIN=localhost.tiangolo.com
 ```
 
-That will be used by the Docker Compose files to configure the base domain for the services.
+This domain and all subdomains resolve to `127.0.0.1`. Traefik routes `api.localhost.tiangolo.com` → backend, `dashboard.localhost.tiangolo.com` → frontend.
 
-Traefik will use this to transmit traffic at `api.localhost.tiangolo.com` to the backend, and traffic at `dashboard.localhost.tiangolo.com` to the frontend.
+---
 
-The domain `localhost.tiangolo.com` is a special domain that is configured (with all its subdomains) to point to `127.0.0.1`. This way you can use that for your local development.
+## Pre-commits
 
-After you update it, run again:
+Using [prek](https://prek.j178.dev/) (modern pre-commit alternative). Config in `.pre-commit-config.yaml`.
 
-```bash
-docker compose watch
-```
-
-When deploying, for example in production, the main Traefik is configured outside of the Docker Compose files. For local development, there's an included Traefik in `compose.override.yml`, just to let you test that the domains work as expected, for example with `api.localhost.tiangolo.com` and `dashboard.localhost.tiangolo.com`.
-
-## Docker Compose files and env vars
-
-There is a main `compose.yml` file with all the configurations that apply to the whole stack, it is used automatically by `docker compose`.
-
-And there's also a `compose.override.yml` with overrides for development, for example to mount the source code as a volume. It is used automatically by `docker compose` to apply overrides on top of `compose.yml`.
-
-These Docker Compose files use the `.env` file containing configurations to be injected as environment variables in the containers.
-
-They also use some additional configurations taken from environment variables set in the scripts before calling the `docker compose` command.
-
-After changing variables, make sure you restart the stack:
+Install (from `backend/` folder):
 
 ```bash
-docker compose watch
+uv run prek install -f
 ```
 
-## The .env file
-
-The `.env` file is the one that contains all your configurations, generated keys and passwords, etc.
-
-Depending on your workflow, you could want to exclude it from Git, for example if your project is public. In that case, you would have to make sure to set up a way for your CI tools to obtain it while building or deploying your project.
-
-One way to do it could be to add each environment variable to your CI/CD system, and updating the `compose.yml` file to read that specific env var instead of reading the `.env` file.
-
-## Pre-commits and code linting
-
-we are using a tool called [prek](https://prek.j178.dev/) (modern alternative to [Pre-commit](https://pre-commit.com/)) for code linting and formatting.
-
-When you install it, it runs right before making a commit in git. This way it ensures that the code is consistent and formatted even before it is committed.
-
-You can find a file `.pre-commit-config.yaml` with configurations at the root of the project.
-
-#### Install prek to run automatically
-
-`prek` is already part of the dependencies of the project.
-
-After having the `prek` tool installed and available, you need to "install" it in the local repository, so that it runs automatically before each commit.
-
-Using `uv`, you could do it with (make sure you are inside `backend` folder):
+Run manually:
 
 ```bash
-❯ uv run prek install -f
-prek installed at `../.git/hooks/pre-commit`
+uv run prek run --all-files
 ```
-
-The `-f` flag forces the installation, in case there was already a `pre-commit` hook previously installed.
-
-Now whenever you try to commit, e.g. with:
-
-```bash
-git commit
-```
-
-...prek will run and check and format the code you are about to commit, and will ask you to add that code (stage it) with git again before committing.
-
-Then you can `git add` the modified/fixed files again and now you can commit.
-
-#### Running prek hooks manually
-
-you can also run `prek` manually on all the files, you can do it using `uv` with:
-
-```bash
-❯ uv run prek run --all-files
-check for added large files..............................................Passed
-check toml...............................................................Passed
-check yaml...............................................................Passed
-fix end of files.........................................................Passed
-trim trailing whitespace.................................................Passed
-ruff.....................................................................Passed
-ruff-format..............................................................Passed
-biome check..............................................................Passed
-```
-
-## URLs
-
-The production or staging URLs would use these same paths, but with your own domain.
-
-### Development URLs
-
-Development URLs, for local development.
-
-Frontend: <http://localhost:5173>
-
-Backend: <http://localhost:8000>
-
-Automatic Interactive Docs (Swagger UI): <http://localhost:8000/docs>
-
-Automatic Alternative Docs (ReDoc): <http://localhost:8000/redoc>
-
-Adminer: <http://localhost:8080>
-
-Traefik UI: <http://localhost:8090>
-
-MailCatcher: <http://localhost:1080>
-
-### Development URLs with `localhost.tiangolo.com` Configured
-
-Development URLs, for local development.
-
-Frontend: <http://dashboard.localhost.tiangolo.com>
-
-Backend: <http://api.localhost.tiangolo.com>
-
-Automatic Interactive Docs (Swagger UI): <http://api.localhost.tiangolo.com/docs>
-
-Automatic Alternative Docs (ReDoc): <http://api.localhost.tiangolo.com/redoc>
-
-Adminer: <http://localhost.tiangolo.com:8080>
-
-Traefik UI: <http://localhost.tiangolo.com:8090>
-
-MailCatcher: <http://localhost.tiangolo.com:1080>
