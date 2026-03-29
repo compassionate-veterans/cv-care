@@ -48,10 +48,51 @@ services:
   db:
     restart: "no"
     ports:
-      - "5432:5432"
+      - "5434:5432"
 
   adminer:
     restart: "no"
+    ports:
+      - "8081:8080"
+
+  fhir-db:
+    image: postgres:15
+    restart: "no"
+    volumes:
+      - fhir-db-data:/var/lib/postgresql/data/pgdata
+    environment:
+      PGDATA: /var/lib/postgresql/data/pgdata
+      POSTGRES_DB: fhir
+      POSTGRES_USER: fhir
+      POSTGRES_PASSWORD: ${FHIR_DB_PASSWORD:-changethis}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fhir -d fhir"]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 10s
+    ports:
+      - "5433:5432"
+
+  hapi-fhir:
+    image: hapiproject/hapi:latest
+    restart: "no"
+    depends_on:
+      fhir-db:
+        condition: service_healthy
+    environment:
+      spring.datasource.url: jdbc:postgresql://fhir-db:5432/fhir
+      spring.datasource.username: fhir
+      spring.datasource.password: ${FHIR_DB_PASSWORD:-changethis}
+      spring.datasource.driverClassName: org.postgresql.Driver
+      spring.jpa.properties.hibernate.dialect: ca.uhn.fhir.jpa.model.dialect.HapiFhirPostgresDialect
+      hapi.fhir.fhir_version: R4B
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/fhir/metadata || exit 1"]
+      interval: 15s
+      retries: 10
+      start_period: 90s
+      timeout: 10s
     ports:
       - "8080:8080"
 
@@ -128,6 +169,9 @@ services:
       - ./frontend/test-results:/app/frontend/test-results
     ports:
       - 9323:9323
+
+volumes:
+  fhir-db-data:
 
 networks:
   traefik-public:
