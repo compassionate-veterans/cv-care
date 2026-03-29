@@ -1,129 +1,186 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from enum import Enum
 
-from pydantic import EmailStr
-from sqlalchemy import DateTime
+from sqlalchemy import Column, DateTime, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, Relationship, SQLModel
 
 
-def get_datetime_utc() -> datetime:
-    return datetime.now(timezone.utc)
+def utc_now() -> datetime:
+    return datetime.now(UTC)
 
 
-# Shared properties
-class UserBase(SQLModel):
-    email: EmailStr = Field(unique=True, index=True, max_length=255)
-    is_active: bool = True
-    is_superuser: bool = False
-    full_name: str | None = Field(default=None, max_length=255)
+# ── Enums ──────────────────────────────────────────────────
 
 
-# Properties to receive via API on creation
-class UserCreate(UserBase):
-    password: str = Field(min_length=8, max_length=128)
+class UserRole(str, Enum):
+    PATIENT = "PATIENT"
+    ADMIN_CANNABIS = "ADMIN_CANNABIS"
+    PROVIDER = "PROVIDER"
+    SUPER_USER = "SUPER_USER"
 
 
-class UserRegister(SQLModel):
-    email: EmailStr = Field(max_length=255)
-    password: str = Field(min_length=8, max_length=128)
-    full_name: str | None = Field(default=None, max_length=255)
+class AuthProvider(str, Enum):
+    GOOGLE = "google"
+    APPLE = "apple"
+    SMS_OTP = "sms_otp"
 
 
-# Properties to receive via API on update, all are optional
-class UserUpdate(UserBase):
-    email: EmailStr | None = Field(default=None, max_length=255)  # type: ignore
-    password: str | None = Field(default=None, min_length=8, max_length=128)
+class PipelineStage(str, Enum):
+    RAW = "raw"
+    FILTERED = "filtered"
+    REDACTED = "redacted"
+    NOTE_GENERATED = "note_generated"
+    COMPLETE = "complete"
+    FAILED = "failed"
 
 
-class UserUpdateMe(SQLModel):
-    full_name: str | None = Field(default=None, max_length=255)
-    email: EmailStr | None = Field(default=None, max_length=255)
+class ZoomSessionStatus(str, Enum):
+    SCHEDULED = "scheduled"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
 
 
-class UpdatePassword(SQLModel):
-    current_password: str = Field(min_length=8, max_length=128)
-    new_password: str = Field(min_length=8, max_length=128)
+# ── AppUser ────────────────────────────────────────────────
 
 
-# Database model, database table inferred from class name
-class User(UserBase, table=True):
+class AppUserBase(SQLModel):
+    fhir_ref: str | None = None
+    role: UserRole
+    display_name: str | None = None
+
+
+class AppUser(AppUserBase, table=True):
+    __tablename__ = "app_users"
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    hashed_password: str
-    created_at: datetime | None = Field(
-        default_factory=get_datetime_utc,
-        sa_type=DateTime(timezone=True),  # type: ignore
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_type=DateTime(timezone=True),  # type: ignore[call-overload]
     )
-    items: list["Item"] = Relationship(back_populates="owner", cascade_delete=True)
+    last_login_at: datetime | None = Field(
+        default=None,
+        sa_type=DateTime(timezone=True),  # type: ignore[call-overload]
+    )
+    auth_identities: list["AuthIdentity"] = Relationship(back_populates="user", cascade_delete=True)
 
 
-# Properties to return via API, id is always required
-class UserPublic(UserBase):
-    id: uuid.UUID
-    created_at: datetime | None = None
-
-
-class UsersPublic(SQLModel):
-    data: list[UserPublic]
-    count: int
-
-
-# Shared properties
-class ItemBase(SQLModel):
-    title: str = Field(min_length=1, max_length=255)
-    description: str | None = Field(default=None, max_length=255)
-
-
-# Properties to receive on item creation
-class ItemCreate(ItemBase):
+class AppUserCreate(AppUserBase):
     pass
 
 
-# Properties to receive on item update
-class ItemUpdate(ItemBase):
-    title: str | None = Field(default=None, min_length=1, max_length=255)  # type: ignore
+class AppUserUpdate(SQLModel):
+    fhir_ref: str | None = None
+    role: UserRole | None = None
+    display_name: str | None = None
+    last_login_at: datetime | None = None
 
 
-# Database model, database table inferred from class name
-class Item(ItemBase, table=True):
-    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    created_at: datetime | None = Field(
-        default_factory=get_datetime_utc,
-        sa_type=DateTime(timezone=True),  # type: ignore
-    )
-    owner_id: uuid.UUID = Field(
-        foreign_key="user.id", nullable=False, ondelete="CASCADE"
-    )
-    owner: User | None = Relationship(back_populates="items")
-
-
-# Properties to return via API, id is always required
-class ItemPublic(ItemBase):
+class AppUserPublic(AppUserBase):
     id: uuid.UUID
-    owner_id: uuid.UUID
-    created_at: datetime | None = None
+    created_at: datetime
 
 
-class ItemsPublic(SQLModel):
-    data: list[ItemPublic]
-    count: int
+# ── AuthIdentity ───────────────────────────────────────────
 
 
-# Generic message
+class AuthIdentityBase(SQLModel):
+    provider: AuthProvider
+    external_id: str
+
+
+class AuthIdentity(AuthIdentityBase, table=True):
+    __tablename__ = "auth_identities"
+    __table_args__ = (UniqueConstraint("provider", "external_id"),)
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    user_id: uuid.UUID = Field(foreign_key="app_users.id", nullable=False, ondelete="CASCADE")
+    verified_at: datetime = Field(
+        default_factory=utc_now,
+        sa_type=DateTime(timezone=True),  # type: ignore[call-overload]
+    )
+    user: AppUser | None = Relationship(back_populates="auth_identities")
+
+
+# ── TextBlast ──────────────────────────────────────────────
+
+
+class TextBlastBase(SQLModel):
+    message: str
+    recipient_count: int | None = None
+
+
+class TextBlast(TextBlastBase, table=True):
+    __tablename__ = "text_blasts"
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    sent_by: uuid.UUID = Field(foreign_key="app_users.id", nullable=False)
+    sent_at: datetime = Field(
+        default_factory=utc_now,
+        sa_type=DateTime(timezone=True),  # type: ignore[call-overload]
+    )
+    twilio_response: dict | None = Field(default=None, sa_column=Column(JSONB))
+
+
+# ── ZoomSession ────────────────────────────────────────────
+
+
+class ZoomSessionBase(SQLModel):
+    encounter_id: str
+    zoom_meeting_id: str
+    status: ZoomSessionStatus
+
+
+class ZoomSession(ZoomSessionBase, table=True):
+    __tablename__ = "zoom_sessions"
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    started_at: datetime | None = Field(
+        default=None,
+        sa_type=DateTime(timezone=True),  # type: ignore[call-overload]
+    )
+    ended_at: datetime | None = Field(
+        default=None,
+        sa_type=DateTime(timezone=True),  # type: ignore[call-overload]
+    )
+
+
+# ── PipelineRun ────────────────────────────────────────────
+
+
+class PipelineRunBase(SQLModel):
+    encounter_id: str
+    stage: PipelineStage
+
+
+class PipelineRun(PipelineRunBase, table=True):
+    __tablename__ = "pipeline_runs"
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    task_id: str | None = None
+    started_at: datetime = Field(
+        default_factory=utc_now,
+        sa_type=DateTime(timezone=True),  # type: ignore[call-overload]
+    )
+    completed_at: datetime | None = Field(
+        default=None,
+        sa_type=DateTime(timezone=True),  # type: ignore[call-overload]
+    )
+    error: str | None = None
+    community_turns_discarded: int = 0
+    patient_turns_kept: int = 0
+
+
+# ── Shared response models ────────────────────────────────
+
+
 class Message(SQLModel):
     message: str
 
 
-# JSON payload containing access token
 class Token(SQLModel):
     access_token: str
     token_type: str = "bearer"
 
 
-# Contents of JWT token
 class TokenPayload(SQLModel):
     sub: str | None = None
-
-
-class NewPassword(SQLModel):
-    token: str
-    new_password: str = Field(min_length=8, max_length=128)
+    role: str | None = None
+    fhir_ref: str | None = None

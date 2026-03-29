@@ -103,8 +103,9 @@ async def fhir_put(path: str, body: dict) -> dict:
 ```
 
 **FHIR resources in use:**
-- `Patient` — clinical record with custom extensions
+- `Patient` — everyone gets one (minimal: preferred name + contact). Therapy consent upgrades to full clinical record.
 - `Practitioner` — therapist
+- `Consent` — gates all data collection. Types: therapy_participation, location_sharing, recording_ai, mmj_management. See consent model below.
 - `Encounter` — one per group session
 - `DocumentReference` — redacted transcript
 - `Composition` — progress note (draft → final)
@@ -112,11 +113,24 @@ async def fhir_put(path: str, body: dict) -> dict:
 - `Observation` — attendance (valueBoolean) and location (lat/lng)
 - `AuditEvent` — HIPAA audit trail (written to HAPI directly)
 
-**Custom extension namespace:** `http://yourorg.org/fhir/StructureDefinition/`
+**Custom extension namespace:** `http://compassionateveterans.org/fhir/StructureDefinition/`
 
-Key extensions on `Patient`: `ptsd-consent`, `location-share-consent`,
-`va-patient-id`, `cannabis-card`, `recording-ai-consent`.
-See `docs/schema.md` for full extension definitions.
+**`Patient.identifier` systems:**
+- `http://compassionateveterans.org/patient-id` — internal ID
+- `http://re-compass.com/patient-id` — links to ReCompass for MMJ management
+- `http://va.gov/patient-id` — VA patient ID (deferred, not in v0)
+
+No cannabis card data stored locally. MMJ cards, verification, and documents
+live entirely in ReCompass. Integration via API (or link-out for v1).
+
+**Consent model:** Consent is the feature gate, not roles. Everyone starts minimal.
+Each FHIR Consent resource unlocks capabilities:
+- `therapy_participation` — FHIR Patient becomes full clinical record, HIPAA notice, SOAP/DAP notes
+- `location_sharing` — VA requirement, opt-in only
+- `recording_ai` — transcript processing + AI note generation
+- `mmj_management` — ReCompass manages card. Consent gates cannabis admin access to contact patient and link to ReCompass. Expires with card.
+No consent = feature is invisible for that person, not disabled.
+Attendance is universal and not consent-gated.
 
 ---
 
@@ -288,3 +302,5 @@ OLLAMA_MODEL=llama3.1:8b
 4. SMS: non-PHI content only
 5. HAPI FHIR: internal Docker network only, never exposed
 6. FHIR is source of truth for clinical data; app_db is operational only
+7. Consent gates features: no consent = feature invisible, not disabled
+8. Every participant gets a FHIR Patient; therapy consent upgrades to full clinical record

@@ -1,36 +1,37 @@
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from typing import Annotated
 
 import jwt
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt.exceptions import InvalidTokenError
 from pydantic import ValidationError
 from sqlmodel import Session
 
+from app import fhir
 from app.core import security
 from app.core.config import settings
 from app.core.db import engine
-from app.models import TokenPayload, User
+from app.models import AppUser, TokenPayload, UserRole
 
-reusable_oauth2 = OAuth2PasswordBearer(
-    tokenUrl=f"{settings.API_V1_STR}/login/access-token"
-)
+bearer_scheme = HTTPBearer()
 
 
-def get_db() -> Generator[Session, None, None]:
+def get_db() -> Generator[Session]:
     with Session(engine) as session:
         yield session
 
 
 SessionDep = Annotated[Session, Depends(get_db)]
-TokenDep = Annotated[str, Depends(reusable_oauth2)]
+TokenDep = Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)]
 
 
-def get_current_user(session: SessionDep, token: TokenDep) -> User:
+def get_current_user(session: SessionDep, credentials: TokenDep) -> AppUser:
     try:
         payload = jwt.decode(
-            token, settings.SECRET_KEY, algorithms=[security.ALGORITHM]
+            credentials.credentials,
+            settings.SECRET_KEY,
+            algorithms=[security.ALGORITHM],
         )
         token_data = TokenPayload(**payload)
     except (InvalidTokenError, ValidationError):
@@ -38,20 +39,38 @@ def get_current_user(session: SessionDep, token: TokenDep) -> User:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Could not validate credentials",
         )
-    user = session.get(User, token_data.sub)
+    user = session.get(AppUser, token_data.sub)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    if not user.is_active:
-        raise HTTPException(status_code=400, detail="Inactive user")
     return user
 
 
-CurrentUser = Annotated[User, Depends(get_current_user)]
+CurrentUser = Annotated[AppUser, Depends(get_current_user)]
 
 
-def get_current_active_superuser(current_user: CurrentUser) -> User:
-    if not current_user.is_superuser:
-        raise HTTPException(
-            status_code=403, detail="The user doesn't have enough privileges"
-        )
-    return current_user
+def get_fhir(request: Request) -> fhir.Client:
+    return request.app.state.fhir
+
+
+FHIRDep = Annotated[fhir.Client, Depends(get_fhir)]
+
+
+def _require_role(*allowed: UserRole) -> Callable[[CurrentUser], AppUser]:
+    def checker(current_user: CurrentUser) -> AppUser:
+        if current_user.role not in allowed:
+            raise HTTPException(status_code=403, detail="Insufficient privileges")
+        return current_user
+
+    return checker
+
+
+RequireProvider = Annotated[AppUser, Depends(_require_role(UserRole.PROVIDER, UserRole.SUPER_USER))]
+RequireAdminCannabis = Annotated[
+    AppUser,
+    Depends(_require_role(UserRole.ADMIN_CANNABIS, UserRole.PROVIDER, UserRole.SUPER_USER)),
+]
+RequirePatient = Annotated[
+    AppUser,
+    Depends(_require_role(UserRole.PATIENT, UserRole.PROVIDER, UserRole.SUPER_USER)),
+]
+RequireSuperUser = Annotated[AppUser, Depends(_require_role(UserRole.SUPER_USER))]
