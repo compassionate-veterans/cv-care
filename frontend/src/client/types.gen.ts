@@ -14,12 +14,67 @@ export type AppUserPublic = {
     created_at: string;
 };
 
+export type AttendanceCreateRequest = {
+    patient_id?: (string | null);
+    display_name?: (string | null);
+    encounter_id: string;
+    attended?: boolean;
+};
+
+export type AttendancePublic = {
+    id: string;
+    patient_fhir_ref: string;
+    encounter_id: string;
+    attended: boolean;
+    status: string;
+    effective_date_time?: (string | null);
+};
+
+export type ConsentCreateRequest = {
+    consent_type: ConsentType;
+    expires_at?: (string | null);
+};
+
+export type ConsentPublic = {
+    id: string;
+    consent_type: string;
+    status: string;
+    date_time?: (string | null);
+    expires_at?: (string | null);
+};
+
+export type ConsentType = 'therapy_participation' | 'location_sharing' | 'recording_ai' | 'mmj_management';
+
 export type HTTPValidationError = {
     detail?: Array<ValidationError>;
 };
 
 export type Message = {
     message: string;
+};
+
+export type MMJInfoResponse = {
+    display_name: (string | null);
+    phone: (string | null);
+    recompass_patient_id?: (string | null);
+    consent_expires?: (string | null);
+};
+
+export type Patient = {
+    [key: string]: unknown;
+};
+
+export type PatientEnrollRequest = {
+    display_name: string;
+    phone: string;
+};
+
+export type PatientEnrollResponse = {
+    id: string;
+    display_name: (string | null);
+    fhir_ref: string;
+    role: UserRole;
+    created_at: string;
 };
 
 export type Token = {
@@ -39,7 +94,72 @@ export type ValidationError = {
     };
 };
 
+export type AttendanceMarkAttendanceData = {
+    requestBody: AttendanceCreateRequest;
+};
+
+export type AttendanceMarkAttendanceResponse = (AttendancePublic);
+
+export type AttendanceListAttendanceData = {
+    encounterId?: (string | null);
+    patientId?: (string | null);
+};
+
+export type AttendanceListAttendanceResponse = (Array<AttendancePublic>);
+
+export type AttendanceUndoAttendanceData = {
+    observationId: string;
+};
+
+export type AttendanceUndoAttendanceResponse = (AttendancePublic);
+
 export type AuthReadCurrentUserResponse = (AppUserPublic);
+
+export type ConsentCreateConsentData = {
+    patientId: string;
+    requestBody: ConsentCreateRequest;
+};
+
+export type ConsentCreateConsentResponse = (ConsentPublic);
+
+export type ConsentListConsentsData = {
+    patientId: string;
+};
+
+export type ConsentListConsentsResponse = (Array<ConsentPublic>);
+
+export type ConsentRevokeConsentData = {
+    consentId: string;
+    patientId: string;
+};
+
+export type ConsentRevokeConsentResponse = (ConsentPublic);
+
+export type PatientsListPatientsResponse = (Array<PatientEnrollResponse>);
+
+export type PatientsEnrollPatientData = {
+    requestBody: PatientEnrollRequest;
+};
+
+export type PatientsEnrollPatientResponse = (PatientEnrollResponse);
+
+export type PatientsGetPatientData = {
+    patientId: string;
+};
+
+export type PatientsGetPatientResponse = (PatientEnrollResponse);
+
+export type PatientsGetClinicalData = {
+    patientId: string;
+};
+
+export type PatientsGetClinicalResponse = (Patient);
+
+export type PatientsGetMmjInfoData = {
+    patientId: string;
+};
+
+export type PatientsGetMmjInfoResponse = (MMJInfoResponse);
 
 export type PrivateCreateUserData = {
     requestBody: AppUserCreate;

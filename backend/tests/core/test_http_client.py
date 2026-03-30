@@ -1,24 +1,14 @@
 import httpx
 
-from app.core.client import (
-    AsyncHTTPClient,
-    HttpxClient,
-    RetryingHttpxClient,
-    _is_retryable_response,
-    create_http_client,
-)
+from app.core.client import HttpxClient, RetryingHttpxClient, _is_retryable_response, create_http_client
 
 
 def test_create_client_default_is_httpx() -> None:
-    client = create_http_client()
-    assert isinstance(client, HttpxClient)
-    assert isinstance(client, AsyncHTTPClient)
+    assert isinstance(create_http_client(), HttpxClient)
 
 
 def test_create_client_with_retry() -> None:
-    client = create_http_client(retry=True)
-    assert isinstance(client, RetryingHttpxClient)
-    assert isinstance(client, AsyncHTTPClient)
+    assert isinstance(create_http_client(retry=True), RetryingHttpxClient)
 
 
 def test_retryable_status_codes() -> None:

@@ -1,4 +1,3 @@
-import abc
 from collections.abc import Callable, Coroutine
 from typing import Any
 
@@ -6,24 +5,7 @@ import httpx
 import tenacity
 
 
-class AsyncHTTPClient(abc.ABC):
-    @abc.abstractmethod
-    async def get(self, url: str, **kwargs: Any) -> httpx.Response: ...
-
-    @abc.abstractmethod
-    async def post(self, url: str, **kwargs: Any) -> httpx.Response: ...
-
-    @abc.abstractmethod
-    async def put(self, url: str, **kwargs: Any) -> httpx.Response: ...
-
-    @abc.abstractmethod
-    async def delete(self, url: str, **kwargs: Any) -> httpx.Response: ...
-
-    @abc.abstractmethod
-    async def close(self) -> None: ...
-
-
-class HttpxClient(AsyncHTTPClient):
+class HttpxClient:
     def __init__(self, **client_kwargs: Any) -> None:
         self._client = httpx.AsyncClient(**client_kwargs)
 
@@ -80,11 +62,5 @@ class RetryingHttpxClient(HttpxClient):
         return await self._with_retry(super().delete)(url, **kwargs)
 
 
-def create_http_client(
-    retry: bool = False,
-    max_attempts: int = 3,
-    **client_kwargs: Any,
-) -> AsyncHTTPClient:
-    if retry:
-        return RetryingHttpxClient(max_attempts=max_attempts, **client_kwargs)
-    return HttpxClient(**client_kwargs)
+def create_http_client(retry: bool = False, max_attempts: int = 3, **client_kwargs: Any) -> HttpxClient:
+    return RetryingHttpxClient(max_attempts=max_attempts, **client_kwargs) if retry else HttpxClient(**client_kwargs)

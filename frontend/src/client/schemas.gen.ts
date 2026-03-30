@@ -76,6 +76,159 @@ export const AppUserPublicSchema = {
     title: 'AppUserPublic'
 } as const;
 
+export const AttendanceCreateRequestSchema = {
+    properties: {
+        patient_id: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'uuid'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Patient Id'
+        },
+        display_name: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Display Name'
+        },
+        encounter_id: {
+            type: 'string',
+            title: 'Encounter Id'
+        },
+        attended: {
+            type: 'boolean',
+            title: 'Attended',
+            default: true
+        }
+    },
+    type: 'object',
+    required: ['encounter_id'],
+    title: 'AttendanceCreateRequest'
+} as const;
+
+export const AttendancePublicSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            title: 'Id'
+        },
+        patient_fhir_ref: {
+            type: 'string',
+            title: 'Patient Fhir Ref'
+        },
+        encounter_id: {
+            type: 'string',
+            title: 'Encounter Id'
+        },
+        attended: {
+            type: 'boolean',
+            title: 'Attended'
+        },
+        status: {
+            type: 'string',
+            title: 'Status'
+        },
+        effective_date_time: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Effective Date Time'
+        }
+    },
+    type: 'object',
+    required: ['id', 'patient_fhir_ref', 'encounter_id', 'attended', 'status'],
+    title: 'AttendancePublic'
+} as const;
+
+export const ConsentCreateRequestSchema = {
+    properties: {
+        consent_type: {
+            '$ref': '#/components/schemas/ConsentType'
+        },
+        expires_at: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Expires At'
+        }
+    },
+    type: 'object',
+    required: ['consent_type'],
+    title: 'ConsentCreateRequest'
+} as const;
+
+export const ConsentPublicSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            title: 'Id'
+        },
+        consent_type: {
+            type: 'string',
+            title: 'Consent Type'
+        },
+        status: {
+            type: 'string',
+            title: 'Status'
+        },
+        date_time: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Date Time'
+        },
+        expires_at: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Expires At'
+        }
+    },
+    type: 'object',
+    required: ['id', 'consent_type', 'status'],
+    title: 'ConsentPublic'
+} as const;
+
+export const ConsentTypeSchema = {
+    type: 'string',
+    enum: ['therapy_participation', 'location_sharing', 'recording_ai', 'mmj_management'],
+    title: 'ConsentType'
+} as const;
+
 export const HTTPValidationErrorSchema = {
     properties: {
         detail: {
@@ -90,6 +243,59 @@ export const HTTPValidationErrorSchema = {
     title: 'HTTPValidationError'
 } as const;
 
+export const MMJInfoResponseSchema = {
+    properties: {
+        display_name: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Display Name'
+        },
+        phone: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Phone'
+        },
+        recompass_patient_id: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Recompass Patient Id'
+        },
+        consent_expires: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Consent Expires'
+        }
+    },
+    type: 'object',
+    required: ['display_name', 'phone'],
+    title: 'MMJInfoResponse'
+} as const;
+
 export const MessageSchema = {
     properties: {
         message: {
@@ -100,6 +306,63 @@ export const MessageSchema = {
     type: 'object',
     required: ['message'],
     title: 'Message'
+} as const;
+
+export const PatientSchema = {
+    additionalProperties: true,
+    type: 'object'
+} as const;
+
+export const PatientEnrollRequestSchema = {
+    properties: {
+        display_name: {
+            type: 'string',
+            title: 'Display Name'
+        },
+        phone: {
+            type: 'string',
+            title: 'Phone'
+        }
+    },
+    type: 'object',
+    required: ['display_name', 'phone'],
+    title: 'PatientEnrollRequest'
+} as const;
+
+export const PatientEnrollResponseSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        display_name: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Display Name'
+        },
+        fhir_ref: {
+            type: 'string',
+            title: 'Fhir Ref'
+        },
+        role: {
+            '$ref': '#/components/schemas/UserRole'
+        },
+        created_at: {
+            type: 'string',
+            format: 'date-time',
+            title: 'Created At'
+        }
+    },
+    type: 'object',
+    required: ['id', 'display_name', 'fhir_ref', 'role', 'created_at'],
+    title: 'PatientEnrollResponse'
 } as const;
 
 export const TokenSchema = {
