@@ -42,7 +42,7 @@ repos:
 
       - id: local-mypy
         name: mypy check
-        entry: uv run mypy backend/app
+        entry: uv run mypy backend/app backend/tests
         require_serial: true
         language: unsupported
         pass_filenames: false

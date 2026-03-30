@@ -3,7 +3,70 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { AuthReadCurrentUserResponse, PrivateCreateUserData, PrivateCreateUserResponse, PrivateDevTokenData, PrivateDevTokenResponse, UsersListUsersData, UsersListUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersGetUserData, UsersGetUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
+import type { AttendanceMarkAttendanceData, AttendanceMarkAttendanceResponse, AttendanceListAttendanceData, AttendanceListAttendanceResponse, AttendanceUndoAttendanceData, AttendanceUndoAttendanceResponse, AuthReadCurrentUserResponse, ConsentCreateConsentData, ConsentCreateConsentResponse, ConsentListConsentsData, ConsentListConsentsResponse, ConsentRevokeConsentData, ConsentRevokeConsentResponse, PatientsListPatientsResponse, PatientsEnrollPatientData, PatientsEnrollPatientResponse, PatientsGetPatientData, PatientsGetPatientResponse, PatientsGetClinicalData, PatientsGetClinicalResponse, PatientsGetMmjInfoData, PatientsGetMmjInfoResponse, PrivateCreateUserData, PrivateCreateUserResponse, PrivateDevTokenData, PrivateDevTokenResponse, UsersListUsersData, UsersListUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersGetUserData, UsersGetUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
+
+export class AttendanceService {
+    /**
+     * Mark Attendance
+     * @param data The data for the request.
+     * @param data.requestBody
+     * @returns AttendancePublic Successful Response
+     * @throws ApiError
+     */
+    public static markAttendance(data: AttendanceMarkAttendanceData): CancelablePromise<AttendanceMarkAttendanceResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/attendance/',
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * List Attendance
+     * @param data The data for the request.
+     * @param data.patientId
+     * @param data.encounterId
+     * @returns AttendancePublic Successful Response
+     * @throws ApiError
+     */
+    public static listAttendance(data: AttendanceListAttendanceData = {}): CancelablePromise<AttendanceListAttendanceResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/attendance/',
+            query: {
+                patient_id: data.patientId,
+                encounter_id: data.encounterId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Undo Attendance
+     * @param data The data for the request.
+     * @param data.observationId
+     * @returns AttendancePublic Successful Response
+     * @throws ApiError
+     */
+    public static undoAttendance(data: AttendanceUndoAttendanceData): CancelablePromise<AttendanceUndoAttendanceResponse> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/v1/attendance/{observation_id}/undo',
+            path: {
+                observation_id: data.observationId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+}
 
 export class AuthService {
     /**
@@ -16,6 +79,166 @@ export class AuthService {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/v1/auth/me'
+        });
+    }
+}
+
+export class ConsentService {
+    /**
+     * Create Consent
+     * @param data The data for the request.
+     * @param data.patientId
+     * @param data.requestBody
+     * @returns ConsentPublic Successful Response
+     * @throws ApiError
+     */
+    public static createConsent(data: ConsentCreateConsentData): CancelablePromise<ConsentCreateConsentResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/patients/{patient_id}/consents/',
+            path: {
+                patient_id: data.patientId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * List Consents
+     * @param data The data for the request.
+     * @param data.patientId
+     * @returns ConsentPublic Successful Response
+     * @throws ApiError
+     */
+    public static listConsents(data: ConsentListConsentsData): CancelablePromise<ConsentListConsentsResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/patients/{patient_id}/consents/',
+            path: {
+                patient_id: data.patientId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Revoke Consent
+     * @param data The data for the request.
+     * @param data.patientId
+     * @param data.consentId
+     * @returns ConsentPublic Successful Response
+     * @throws ApiError
+     */
+    public static revokeConsent(data: ConsentRevokeConsentData): CancelablePromise<ConsentRevokeConsentResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/patients/{patient_id}/consents/{consent_id}/revoke',
+            path: {
+                patient_id: data.patientId,
+                consent_id: data.consentId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+}
+
+export class PatientsService {
+    /**
+     * List Patients
+     * @returns PatientEnrollResponse Successful Response
+     * @throws ApiError
+     */
+    public static listPatients(): CancelablePromise<PatientsListPatientsResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/patients/'
+        });
+    }
+    
+    /**
+     * Enroll Patient
+     * @param data The data for the request.
+     * @param data.requestBody
+     * @returns PatientEnrollResponse Successful Response
+     * @throws ApiError
+     */
+    public static enrollPatient(data: PatientsEnrollPatientData): CancelablePromise<PatientsEnrollPatientResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/patients/',
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Get Patient
+     * @param data The data for the request.
+     * @param data.patientId
+     * @returns PatientEnrollResponse Successful Response
+     * @throws ApiError
+     */
+    public static getPatient(data: PatientsGetPatientData): CancelablePromise<PatientsGetPatientResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/patients/{patient_id}',
+            path: {
+                patient_id: data.patientId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Get Clinical
+     * @param data The data for the request.
+     * @param data.patientId
+     * @returns Patient Successful Response
+     * @throws ApiError
+     */
+    public static getClinical(data: PatientsGetClinicalData): CancelablePromise<PatientsGetClinicalResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/patients/{patient_id}/clinical',
+            path: {
+                patient_id: data.patientId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Get Mmj Info
+     * @param data The data for the request.
+     * @param data.patientId
+     * @returns MMJInfoResponse Successful Response
+     * @throws ApiError
+     */
+    public static getMmjInfo(data: PatientsGetMmjInfoData): CancelablePromise<PatientsGetMmjInfoResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/patients/{patient_id}/mmj',
+            path: {
+                patient_id: data.patientId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
         });
     }
 }

@@ -145,9 +145,9 @@ async def test_cascade_delete_auth_identities(db: AsyncSession) -> None:
         external_id=f"cascade-{uuid.uuid4().hex[:8]}",
     )
     user_id = user.id
-    from sqlmodel import delete
+    from sqlalchemy import delete
 
-    await db.exec(delete(AppUser).where(AppUser.id == user_id))  # type: ignore[call-overload]
+    await db.execute(delete(AppUser).where(AppUser.id == user_id))  # type: ignore[arg-type]
     await db.commit()
     result = await db.exec(select(AuthIdentity).where(AuthIdentity.user_id == user_id))
     orphans = result.all()

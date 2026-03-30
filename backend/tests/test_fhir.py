@@ -1,4 +1,5 @@
 import httpx
+from fhir.resources.R4B.humanname import HumanName
 from fhir.resources.R4B.patient import Patient
 
 from app.core.config import settings
@@ -7,7 +8,7 @@ FHIR_BASE = settings.FHIR_BASE_URL
 
 
 def _post_patient(family: str, given: str) -> Patient:
-    p = Patient(name=[{"use": "official", "family": family, "given": [given]}])
+    p = Patient(name=[HumanName(use="official", family=family, given=[given])])
     r = httpx.post(
         f"{FHIR_BASE}/Patient",
         content=p.model_dump_json(exclude_unset=True),
@@ -20,6 +21,7 @@ def _post_patient(family: str, given: str) -> Patient:
 def test_create_patient() -> None:
     created = _post_patient("CreateTst", "Jane")
     assert created.id is not None
+    assert created.name is not None
     assert created.name[0].family == "CreateTst"
 
 
@@ -28,11 +30,13 @@ def test_read_patient() -> None:
     r = httpx.get(f"{FHIR_BASE}/Patient/{created.id}")
     assert r.status_code == 200
     fetched = Patient.model_validate(r.json())
+    assert fetched.name is not None
     assert fetched.name[0].family == "ReadTst"
 
 
 def test_update_patient() -> None:
     created = _post_patient("Before", "Sue")
+    assert created.name is not None
     created.name[0].family = "After"
     r = httpx.put(
         f"{FHIR_BASE}/Patient/{created.id}",
@@ -41,6 +45,7 @@ def test_update_patient() -> None:
     )
     assert r.status_code == 200
     updated = Patient.model_validate(r.json())
+    assert updated.name is not None
     assert updated.name[0].family == "After"
 
 

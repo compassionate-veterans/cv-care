@@ -6,9 +6,11 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.client import create_http_client
 from app.core.config import settings
 from app.core.db import init_db
 from app.core.security import create_access_token
+from app.fhir import Client as FHIRClient
 from app.main import app
 from app.models import AppUser, UserRole
 
@@ -34,9 +36,11 @@ async def db(engine: AsyncEngine) -> AsyncGenerator[AsyncSession]:
 
 @pytest.fixture
 async def client() -> AsyncGenerator[AsyncClient]:
+    app.state.fhir = FHIRClient(create_http_client(), base_url=settings.FHIR_BASE_URL)
     transport = ASGITransport(app=app)  # type: ignore[arg-type]
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
+    await app.state.fhir.close()
 
 
 def _make_token_headers(user: AppUser) -> dict[str, str]:
