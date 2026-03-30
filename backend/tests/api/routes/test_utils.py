@@ -1,9 +1,9 @@
-from fastapi.testclient import TestClient
+from httpx import AsyncClient
 
 from app.core.config import settings
 
 
-def test_health_check(client: TestClient) -> None:
-    r = client.get(f"{settings.API_V1_STR}/utils/health-check/")
+async def test_health_check(client: AsyncClient) -> None:
+    r = await client.get(f"{settings.API_V1_STR}/utils/health-check/")
     assert r.status_code == 200
     assert r.json() is True

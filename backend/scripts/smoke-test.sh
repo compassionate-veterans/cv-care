@@ -29,7 +29,7 @@ USER_JSON=$(curl -sf -X POST $BASE/private/users/ -H "Content-Type: application/
 USER_ID=$(echo "$USER_JSON" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
 check "create-user" "PATIENT" "$(echo "$USER_JSON" | python3 -c 'import sys,json; print(json.load(sys.stdin)["role"])')"
 
-TOKEN_JSON=$(curl -sf -X POST "$BASE/auth/dev-token?user_id=$USER_ID")
+TOKEN_JSON=$(curl -sf -X POST "$BASE/private/dev-token?user_id=$USER_ID")
 TOKEN=$(echo "$TOKEN_JSON" | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')
 check "dev-token" "bearer" "$(echo "$TOKEN_JSON" | python3 -c 'import sys,json; print(json.load(sys.stdin)["token_type"])')"
 

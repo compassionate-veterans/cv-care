@@ -1,4 +1,4 @@
-from collections.abc import Callable, Generator
+from collections.abc import AsyncGenerator, Callable
 from typing import Annotated
 
 import jwt
@@ -6,7 +6,7 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt.exceptions import InvalidTokenError
 from pydantic import ValidationError
-from sqlmodel import Session
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app import fhir
 from app.core import security
@@ -17,16 +17,16 @@ from app.models import AppUser, TokenPayload, UserRole
 bearer_scheme = HTTPBearer()
 
 
-def get_db() -> Generator[Session]:
-    with Session(engine) as session:
+async def get_db() -> AsyncGenerator[AsyncSession]:
+    async with AsyncSession(engine, expire_on_commit=False) as session:
         yield session
 
 
-SessionDep = Annotated[Session, Depends(get_db)]
+SessionDep = Annotated[AsyncSession, Depends(get_db)]
 TokenDep = Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)]
 
 
-def get_current_user(session: SessionDep, credentials: TokenDep) -> AppUser:
+async def get_current_user(session: SessionDep, credentials: TokenDep) -> AppUser:
     try:
         payload = jwt.decode(
             credentials.credentials,
@@ -39,7 +39,7 @@ def get_current_user(session: SessionDep, credentials: TokenDep) -> AppUser:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Could not validate credentials",
         )
-    user = session.get(AppUser, token_data.sub)
+    user = await session.get(AppUser, token_data.sub)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return user
@@ -49,7 +49,7 @@ CurrentUser = Annotated[AppUser, Depends(get_current_user)]
 
 
 def get_fhir(request: Request) -> fhir.Client:
-    return request.app.state.fhir
+    return request.app.state.fhir  # type: ignore[no-any-return]
 
 
 FHIRDep = Annotated[fhir.Client, Depends(get_fhir)]

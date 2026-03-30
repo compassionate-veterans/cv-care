@@ -8,4 +8,5 @@ node_modules/
 /docs/local-dev-context.md
 .idea/
 .env
+.env.test
 TODO.md

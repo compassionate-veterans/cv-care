@@ -39,12 +39,6 @@ export type ValidationError = {
     };
 };
 
-export type AuthDevTokenData = {
-    userId: string;
-};
-
-export type AuthDevTokenResponse = (Token);
-
 export type AuthReadCurrentUserResponse = (AppUserPublic);
 
 export type PrivateCreateUserData = {
@@ -52,6 +46,12 @@ export type PrivateCreateUserData = {
 };
 
 export type PrivateCreateUserResponse = (AppUserPublic);
+
+export type PrivateDevTokenData = {
+    userId: string;
+};
+
+export type PrivateDevTokenResponse = (Token);
 
 export type UsersListUsersData = {
     limit?: number;

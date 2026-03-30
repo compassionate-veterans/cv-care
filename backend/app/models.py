@@ -11,9 +11,6 @@ def utc_now() -> datetime:
     return datetime.now(UTC)
 
 
-# ── Enums ──────────────────────────────────────────────────
-
-
 class UserRole(str, Enum):
     PATIENT = "PATIENT"
     ADMIN_CANNABIS = "ADMIN_CANNABIS"
@@ -41,9 +38,6 @@ class ZoomSessionStatus(str, Enum):
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
-
-
-# ── AppUser ────────────────────────────────────────────────
 
 
 class AppUserBase(SQLModel):
@@ -82,9 +76,6 @@ class AppUserPublic(AppUserBase):
     created_at: datetime
 
 
-# ── AuthIdentity ───────────────────────────────────────────
-
-
 class AuthIdentityBase(SQLModel):
     provider: AuthProvider
     external_id: str
@@ -102,9 +93,6 @@ class AuthIdentity(AuthIdentityBase, table=True):
     user: AppUser | None = Relationship(back_populates="auth_identities")
 
 
-# ── TextBlast ──────────────────────────────────────────────
-
-
 class TextBlastBase(SQLModel):
     message: str
     recipient_count: int | None = None
@@ -113,15 +101,12 @@ class TextBlastBase(SQLModel):
 class TextBlast(TextBlastBase, table=True):
     __tablename__ = "text_blasts"
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    sent_by: uuid.UUID = Field(foreign_key="app_users.id", nullable=False)
+    sent_by: uuid.UUID | None = Field(default=None, foreign_key="app_users.id", ondelete="SET NULL")
     sent_at: datetime = Field(
         default_factory=utc_now,
         sa_type=DateTime(timezone=True),  # type: ignore[call-overload]
     )
     twilio_response: dict | None = Field(default=None, sa_column=Column(JSONB))
-
-
-# ── ZoomSession ────────────────────────────────────────────
 
 
 class ZoomSessionBase(SQLModel):
@@ -141,9 +126,6 @@ class ZoomSession(ZoomSessionBase, table=True):
         default=None,
         sa_type=DateTime(timezone=True),  # type: ignore[call-overload]
     )
-
-
-# ── PipelineRun ────────────────────────────────────────────
 
 
 class PipelineRunBase(SQLModel):
@@ -166,9 +148,6 @@ class PipelineRun(PipelineRunBase, table=True):
     error: str | None = None
     community_turns_discarded: int = 0
     patient_turns_kept: int = 0
-
-
-# ── Shared response models ────────────────────────────────
 
 
 class Message(SQLModel):

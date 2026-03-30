@@ -3,30 +3,9 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { AuthDevTokenData, AuthDevTokenResponse, AuthReadCurrentUserResponse, PrivateCreateUserData, PrivateCreateUserResponse, UsersListUsersData, UsersListUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersGetUserData, UsersGetUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
+import type { AuthReadCurrentUserResponse, PrivateCreateUserData, PrivateCreateUserResponse, PrivateDevTokenData, PrivateDevTokenResponse, UsersListUsersData, UsersListUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersGetUserData, UsersGetUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
 
 export class AuthService {
-    /**
-     * Dev Token
-     * DEV ONLY: Issue a token for a given user_id.
-     * @param data The data for the request.
-     * @param data.userId
-     * @returns Token Successful Response
-     * @throws ApiError
-     */
-    public static devToken(data: AuthDevTokenData): CancelablePromise<AuthDevTokenResponse> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/auth/dev-token',
-            query: {
-                user_id: data.userId
-            },
-            errors: {
-                422: 'Validation Error'
-            }
-        });
-    }
-    
     /**
      * Read Current User
      * Verify token and return current user.
@@ -56,6 +35,27 @@ export class PrivateService {
             url: '/api/v1/private/users/',
             body: data.requestBody,
             mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Dev Token
+     * Issue a token for a given user_id. Dev only.
+     * @param data The data for the request.
+     * @param data.userId
+     * @returns Token Successful Response
+     * @throws ApiError
+     */
+    public static devToken(data: PrivateDevTokenData): CancelablePromise<PrivateDevTokenResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/private/dev-token',
+            query: {
+                user_id: data.userId
+            },
             errors: {
                 422: 'Validation Error'
             }

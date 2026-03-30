@@ -1,7 +1,8 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlmodel import Session, select
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.models import (
     AppUser,
@@ -12,28 +13,28 @@ from app.models import (
 )
 
 
-def create_app_user(*, session: Session, user_in: AppUserCreate) -> AppUser:
+async def create_app_user(*, session: AsyncSession, user_in: AppUserCreate) -> AppUser:
     db_obj = AppUser.model_validate(user_in)
     session.add(db_obj)
-    session.commit()
-    session.refresh(db_obj)
+    await session.commit()
+    await session.refresh(db_obj)
     return db_obj
 
 
-def get_app_user(*, session: Session, user_id: uuid.UUID) -> AppUser | None:
-    return session.get(AppUser, user_id)
+async def get_app_user(*, session: AsyncSession, user_id: uuid.UUID) -> AppUser | None:
+    return await session.get(AppUser, user_id)
 
 
-def update_app_user(*, session: Session, db_user: AppUser, user_in: AppUserUpdate) -> AppUser:
+async def update_app_user(*, session: AsyncSession, db_user: AppUser, user_in: AppUserUpdate) -> AppUser:
     user_data = user_in.model_dump(exclude_unset=True)
     db_user.sqlmodel_update(user_data)
     session.add(db_user)
-    session.commit()
-    session.refresh(db_user)
+    await session.commit()
+    await session.refresh(db_user)
     return db_user
 
 
-def get_user_by_identity(*, session: Session, provider: AuthProvider, external_id: str) -> AppUser | None:
+async def get_user_by_identity(*, session: AsyncSession, provider: AuthProvider, external_id: str) -> AppUser | None:
     statement = (
         select(AppUser)
         .join(AuthIdentity)
@@ -42,24 +43,25 @@ def get_user_by_identity(*, session: Session, provider: AuthProvider, external_i
             AuthIdentity.external_id == external_id,
         )
     )
-    return session.exec(statement).first()
+    result = await session.exec(statement)
+    return result.first()
 
 
-def create_auth_identity(
+async def create_auth_identity(
     *,
-    session: Session,
+    session: AsyncSession,
     user_id: uuid.UUID,
     provider: AuthProvider,
     external_id: str,
 ) -> AuthIdentity:
     identity = AuthIdentity(user_id=user_id, provider=provider, external_id=external_id)
     session.add(identity)
-    session.commit()
-    session.refresh(identity)
+    await session.commit()
+    await session.refresh(identity)
     return identity
 
 
-def touch_last_login(*, session: Session, user: AppUser) -> None:
+async def touch_last_login(*, session: AsyncSession, user: AppUser) -> None:
     user.last_login_at = datetime.now(UTC)
     session.add(user)
-    session.commit()
+    await session.commit()

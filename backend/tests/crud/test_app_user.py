@@ -2,10 +2,13 @@ import uuid
 
 import pytest
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session, select
+from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app import crud
 from app.models import (
+    AppUser,
     AppUserCreate,
     AppUserUpdate,
     AuthIdentity,
@@ -19,9 +22,9 @@ from app.models import (
 )
 
 
-def test_create_app_user_patient(db: Session) -> None:
+async def test_create_app_user_patient(db: AsyncSession) -> None:
     user_in = AppUserCreate(role=UserRole.PATIENT, display_name="Jane Doe")
-    user = crud.create_app_user(session=db, user_in=user_in)
+    user = await crud.create_app_user(session=db, user_in=user_in)
     assert user.role == UserRole.PATIENT
     assert user.display_name == "Jane Doe"
     assert user.fhir_ref is None
@@ -29,162 +32,160 @@ def test_create_app_user_patient(db: Session) -> None:
     assert user.created_at is not None
 
 
-def test_create_app_user_provider(db: Session) -> None:
+async def test_create_app_user_provider(db: AsyncSession) -> None:
     user_in = AppUserCreate(
         role=UserRole.PROVIDER,
         display_name="Dr. Jones",
         fhir_ref="Practitioner/abc-123",
     )
-    user = crud.create_app_user(session=db, user_in=user_in)
+    user = await crud.create_app_user(session=db, user_in=user_in)
     assert user.role == UserRole.PROVIDER
     assert user.fhir_ref == "Practitioner/abc-123"
 
 
-def test_create_app_user_admin_cannabis(db: Session) -> None:
+async def test_create_app_user_admin_cannabis(db: AsyncSession) -> None:
     user_in = AppUserCreate(role=UserRole.ADMIN_CANNABIS, display_name="Cannabis Admin")
-    user = crud.create_app_user(session=db, user_in=user_in)
+    user = await crud.create_app_user(session=db, user_in=user_in)
     assert user.role == UserRole.ADMIN_CANNABIS
 
 
-def test_get_app_user(db: Session) -> None:
+async def test_get_app_user(db: AsyncSession) -> None:
     user_in = AppUserCreate(role=UserRole.PATIENT, display_name="Lookup Test")
-    created = crud.create_app_user(session=db, user_in=user_in)
-    found = crud.get_app_user(session=db, user_id=created.id)
+    created = await crud.create_app_user(session=db, user_in=user_in)
+    found = await crud.get_app_user(session=db, user_id=created.id)
     assert found is not None
     assert found.id == created.id
 
 
-def test_update_app_user(db: Session) -> None:
+async def test_update_app_user(db: AsyncSession) -> None:
     user_in = AppUserCreate(role=UserRole.PATIENT, display_name="Before Update")
-    user = crud.create_app_user(session=db, user_in=user_in)
+    user = await crud.create_app_user(session=db, user_in=user_in)
     update_in = AppUserUpdate(display_name="After Update", fhir_ref="Patient/xyz")
-    updated = crud.update_app_user(session=db, db_user=user, user_in=update_in)
+    updated = await crud.update_app_user(session=db, db_user=user, user_in=update_in)
     assert updated.display_name == "After Update"
     assert updated.fhir_ref == "Patient/xyz"
 
 
-def test_create_auth_identity(db: Session) -> None:
+async def test_create_auth_identity(db: AsyncSession) -> None:
     user_in = AppUserCreate(role=UserRole.PATIENT, display_name="Auth Test")
-    user = crud.create_app_user(session=db, user_in=user_in)
-    identity = crud.create_auth_identity(
+    user = await crud.create_app_user(session=db, user_in=user_in)
+    identity = await crud.create_auth_identity(
         session=db,
         user_id=user.id,
         provider=AuthProvider.GOOGLE,
-        external_id="google-sub-123",
+        external_id=f"google-sub-{uuid.uuid4().hex[:8]}",
     )
     assert identity.provider == AuthProvider.GOOGLE
-    assert identity.external_id == "google-sub-123"
+    assert identity.external_id.startswith("google-sub-")
     assert identity.user_id == user.id
     assert identity.verified_at is not None
 
 
-def test_auth_identity_unique_constraint(db: Session) -> None:
-    user1 = crud.create_app_user(
-        session=db,
-        user_in=AppUserCreate(role=UserRole.PATIENT, display_name="User 1"),
-    )
-    user2 = crud.create_app_user(
-        session=db,
-        user_in=AppUserCreate(role=UserRole.PATIENT, display_name="User 2"),
-    )
-    crud.create_auth_identity(
-        session=db,
-        user_id=user1.id,
-        provider=AuthProvider.SMS_OTP,
-        external_id="+15105550001",
-    )
-    with pytest.raises(IntegrityError):
-        crud.create_auth_identity(
-            session=db,
-            user_id=user2.id,
-            provider=AuthProvider.SMS_OTP,
-            external_id="+15105550001",
+async def test_auth_identity_unique_constraint(engine: AsyncEngine) -> None:
+    phone = f"+1510555{uuid.uuid4().hex[:4]}"
+    async with AsyncSession(engine, expire_on_commit=False) as s:
+        user1 = await crud.create_app_user(
+            session=s,
+            user_in=AppUserCreate(role=UserRole.PATIENT, display_name="Uniq 1"),
         )
-    db.rollback()
+        user2 = await crud.create_app_user(
+            session=s,
+            user_in=AppUserCreate(role=UserRole.PATIENT, display_name="Uniq 2"),
+        )
+        await crud.create_auth_identity(session=s, user_id=user1.id, provider=AuthProvider.SMS_OTP, external_id=phone)
+    async with AsyncSession(engine) as s2:
+        with pytest.raises(IntegrityError):
+            await crud.create_auth_identity(
+                session=s2, user_id=user2.id, provider=AuthProvider.SMS_OTP, external_id=phone
+            )
+        await s2.rollback()
 
 
-def test_get_user_by_identity(db: Session) -> None:
-    user = crud.create_app_user(
+async def test_get_user_by_identity(db: AsyncSession) -> None:
+    user = await crud.create_app_user(
         session=db,
         user_in=AppUserCreate(role=UserRole.PATIENT, display_name="Lookup By Identity"),
     )
-    crud.create_auth_identity(
+    identity = await crud.create_auth_identity(
         session=db,
         user_id=user.id,
         provider=AuthProvider.APPLE,
-        external_id="apple-sub-456",
+        external_id=f"apple-sub-{uuid.uuid4().hex[:8]}",
     )
-    found = crud.get_user_by_identity(session=db, provider=AuthProvider.APPLE, external_id="apple-sub-456")
+    found = await crud.get_user_by_identity(session=db, provider=AuthProvider.APPLE, external_id=identity.external_id)
     assert found is not None
     assert found.id == user.id
 
 
-def test_get_user_by_identity_not_found(db: Session) -> None:
-    found = crud.get_user_by_identity(session=db, provider=AuthProvider.GOOGLE, external_id="does-not-exist")
+async def test_get_user_by_identity_not_found(db: AsyncSession) -> None:
+    found = await crud.get_user_by_identity(session=db, provider=AuthProvider.GOOGLE, external_id="does-not-exist")
     assert found is None
 
 
-def test_touch_last_login(db: Session) -> None:
-    user = crud.create_app_user(
+async def test_touch_last_login(db: AsyncSession) -> None:
+    user = await crud.create_app_user(
         session=db,
         user_in=AppUserCreate(role=UserRole.PATIENT, display_name="Login Test"),
     )
     assert user.last_login_at is None
-    crud.touch_last_login(session=db, user=user)
-    db.refresh(user)
+    await crud.touch_last_login(session=db, user=user)
+    await db.refresh(user)
     assert user.last_login_at is not None
 
 
-def test_cascade_delete_auth_identities(db: Session) -> None:
-    user = crud.create_app_user(
+async def test_cascade_delete_auth_identities(db: AsyncSession) -> None:
+    user = await crud.create_app_user(
         session=db,
         user_in=AppUserCreate(role=UserRole.PATIENT, display_name="Cascade Test"),
     )
-    crud.create_auth_identity(
+    await crud.create_auth_identity(
         session=db,
         user_id=user.id,
         provider=AuthProvider.GOOGLE,
         external_id=f"cascade-{uuid.uuid4().hex[:8]}",
     )
     user_id = user.id
-    db.delete(user)
-    db.commit()
-    orphans = db.exec(select(AuthIdentity).where(AuthIdentity.user_id == user_id)).all()
+    from sqlmodel import delete
+
+    await db.exec(delete(AppUser).where(AppUser.id == user_id))  # type: ignore[call-overload]
+    await db.commit()
+    result = await db.exec(select(AuthIdentity).where(AuthIdentity.user_id == user_id))
+    orphans = result.all()
     assert len(orphans) == 0
 
 
-def test_create_zoom_session(db: Session) -> None:
+async def test_create_zoom_session(db: AsyncSession) -> None:
     zs = ZoomSession(
         encounter_id="enc-001",
         zoom_meeting_id="87654321098",
         status=ZoomSessionStatus.SCHEDULED,
     )
     db.add(zs)
-    db.commit()
-    db.refresh(zs)
+    await db.commit()
+    await db.refresh(zs)
     assert zs.id is not None
     assert zs.status == ZoomSessionStatus.SCHEDULED
 
 
-def test_create_pipeline_run(db: Session) -> None:
+async def test_create_pipeline_run(db: AsyncSession) -> None:
     pr = PipelineRun(encounter_id="enc-001", stage=PipelineStage.RAW)
     db.add(pr)
-    db.commit()
-    db.refresh(pr)
+    await db.commit()
+    await db.refresh(pr)
     assert pr.id is not None
     assert pr.stage == PipelineStage.RAW
     assert pr.community_turns_discarded == 0
 
 
-def test_create_text_blast(db: Session) -> None:
-    user = crud.create_app_user(
+async def test_create_text_blast(db: AsyncSession) -> None:
+    user = await crud.create_app_user(
         session=db,
         user_in=AppUserCreate(role=UserRole.PROVIDER, display_name="Blast Sender"),
     )
     tb = TextBlast(sent_by=user.id, message="Session at 2pm today", recipient_count=12)
     db.add(tb)
-    db.commit()
-    db.refresh(tb)
+    await db.commit()
+    await db.refresh(tb)
     assert tb.id is not None
     assert tb.message == "Session at 2pm today"
     assert tb.recipient_count == 12
